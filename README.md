@@ -32,9 +32,15 @@ file probed for, a page parsed. No account, no allowance, no call home.
   Training:  3 of 8 blocked — Meta-ExternalAgent, Bytespider, Amazonbot.
 ```
 
-Signing in adds the two that cost something real: the answer engines are
-actually asked whether they name the site, and the eight weighted sections are
-scored.
+The rest is inite.ai's MCP server, and it answers signed out too, as a guest:
+the portal (services and prices, call slots, booking a call), the analyzer
+(`check_identity`, and `analyze_site` as the survey - the audit without its two
+paid steps, two a day per address) and the Atlas (`match_tools`,
+`atlas_lookup`, `atlas_search`, `atlas_changes`, `atlas_coupons`).
+
+Signing in makes the calls your account's: its tier of the audit (the teaser on
+a free plan, the whole audit on a paid one) and the member tools - your audits,
+your account, the Atlas tools you own.
 
 ## Install
 

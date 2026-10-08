@@ -8,17 +8,19 @@ import { accessToken } from "./auth.js";
 import { checkAiAccess, checkIdentityFiles, checkPageSignals, publicUrl } from "./checks.js";
 
 /**
- * Two halves, and only one of them needs an account.
+ * Two halves, and neither needs an account to start.
  *
  * The local tools fetch a robots.txt, probe for a file, read the JSON-LD out
  * of a page. That is HTTP and parsing on the machine of whoever installed
  * this, so it costs nobody anything and works the moment the package is
- * installed. A server that does nothing until you sign in is a server nobody
- * gets to the second screen of.
+ * installed.
  *
- * The remote tools are the ones that spend something real — four answer
- * engines asked whether they name a site — and produce the score. Those run
- * against an account, with its own allowance, exactly as on the website.
+ * The remote tools are inite.ai's MCP server: the portal, the analyzer and
+ * the Atlas. It answers a caller with no token too - as a guest, with the
+ * open tools and the audit as a survey, the rule the website keeps for a
+ * visitor without an account. Signing in makes the calls the account's: its
+ * tier, its member tools, its data. A member tool called signed out answers
+ * 401, and that - not the absence of a token - is when this says to sign in.
  *
  * For the remote half this process defines no schemas: it asks
  * https://inite.ai/api/mcp what it offers and forwards calls there, so the
@@ -27,7 +29,7 @@ import { checkAiAccess, checkIdentityFiles, checkPageSignals, publicUrl } from "
  */
 
 export const REMOTE = process.env.INITE_MCP_URL ?? "https://inite.ai/api/mcp";
-export const VERSION = "1.1.0";
+export const VERSION = "1.2.0";
 
 export class NotSignedIn extends Error {
   constructor() {
@@ -98,7 +100,7 @@ let nextId = 1;
 export async function remoteCall(
   method: string,
   params: Record<string, unknown> | undefined,
-  token: string,
+  token: string | null,
   fetchImpl: typeof fetch = fetch,
 ): Promise<any> {
   const res = await fetchImpl(REMOTE, {
@@ -106,7 +108,7 @@ export async function remoteCall(
     headers: {
       "content-type": "application/json",
       accept: "application/json",
-      authorization: `Bearer ${token}`,
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
       "user-agent": `inite-visibility/${VERSION}`,
     },
     body: JSON.stringify({ jsonrpc: "2.0", id: nextId++, method, params }),
@@ -121,10 +123,12 @@ export async function remoteCall(
 }
 
 /**
- * The tool list: local always, remote when there is a token.
+ * The tool list: local always, and the remote server's - signed in or not.
  *
- * A signed-out client sees three working tools and one line on stderr saying
- * what signing in would add — not an empty list that reads as a broken server.
+ * Signed out, the remote list is the guest's view: every tool, the member
+ * ones saying they need an account. If the remote cannot be reached the
+ * three local checks still answer, rather than an empty list that reads as
+ * a broken server.
  */
 export async function listTools(): Promise<{ tools: unknown[] }> {
   const local = [...LOCAL_TOOLS];
@@ -132,9 +136,8 @@ export async function listTools(): Promise<{ tools: unknown[] }> {
     const token = await accessToken();
     if (!token) {
       process.stderr.write(
-        `Signed out: the three local checks are available. \`npx @inite/visibility login\` adds the full audit and the visibility score.\n`,
+        `Signed out: the open tools are available as a guest. \`npx @inite/visibility login\` adds the member tools and your account's tier.\n`,
       );
-      return { tools: local };
     }
     const remote = (await remoteCall("tools/list", undefined, token)) as { tools?: unknown[] };
     return { tools: [...local, ...(remote.tools ?? [])] };
@@ -149,8 +152,9 @@ type ToolResult = { content: { type: string; text: string }[]; isError?: boolean
 export async function callTool(name: string, args: Record<string, unknown>): Promise<ToolResult> {
   try {
     if (LOCAL_NAMES.has(name as LocalName)) return await runLocal(name as LocalName, args);
+    // No token is a guest; the server says 401 for a tool that needs one,
+    // and remoteCall turns that into "sign in".
     const token = await accessToken();
-    if (!token) throw new NotSignedIn();
     return await remoteCall("tools/call", { name, arguments: args }, token);
   } catch (e) {
     // A tool that failed is a result, not a crash: the model can read this and

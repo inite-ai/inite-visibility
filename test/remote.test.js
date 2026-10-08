@@ -52,3 +52,20 @@ test('returns the result untouched', async () => {
   )
   assert.deepEqual(out, { tools: [{ name: 'analyze_site' }] })
 })
+
+test('calls as a guest when signed out - no authorization header, no refusal', async () => {
+  let seen
+  const out = await remoteCall('tools/list', undefined, null, async (_u, init) => {
+    seen = init
+    return jsonRes({ jsonrpc: '2.0', id: 1, result: { tools: [{ name: 'check_identity' }] } })
+  })
+  assert.equal(seen.headers.authorization, undefined)
+  assert.deepEqual(out, { tools: [{ name: 'check_identity' }] })
+})
+
+test('a member tool called signed out still ends in "sign in"', async () => {
+  await assert.rejects(
+    () => remoteCall('tools/call', { name: 'my_reports' }, null, async () => jsonRes({}, 401)),
+    (e) => e instanceof NotSignedIn,
+  )
+})

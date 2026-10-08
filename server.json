@@ -1,10 +1,10 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "ai.inite/inite-visibility",
-  "title": "INITE AI Visibility",
-  "description": "See how ChatGPT, Claude, Gemini and Perplexity read any website. Scored out of 100.",
-  "version": "1.1.2",
-  "websiteUrl": "https://inite.ai/en/analyze",
+  "title": "INITE",
+  "description": "INITE for agents: services and booking, AI visibility audit, an Atlas of AI tools. Token optional.",
+  "version": "2.0.0",
+  "websiteUrl": "https://inite.ai/en/mcp",
   "repository": {
     "url": "https://github.com/inite-ai/inite-visibility",
     "source": "github"
@@ -16,8 +16,8 @@
       "headers": [
         {
           "name": "Authorization",
-          "description": "Bearer <access_token>. Clients that speak the MCP authorization flow obtain one on their own: an unauthenticated call returns 401 with WWW-Authenticate pointing at https://inite.ai/.well-known/oauth-protected-resource, which names auth.inite.ai as the authorization server.",
-          "isRequired": true,
+          "description": "Optional. Without it every open tool answers, under per-address allowances, and the audit runs as the survey. Bearer <access_token> adds the member tools and the account's tier; a member tool called without one answers 401 with WWW-Authenticate pointing at https://inite.ai/.well-known/oauth-protected-resource/api/mcp, which names auth.inite.ai.",
+          "isRequired": false,
           "isSecret": true
         }
       ]
@@ -27,7 +27,7 @@
     {
       "registryType": "npm",
       "identifier": "@inite/visibility",
-      "version": "1.1.2",
+      "version": "1.2.0",
       "transport": {
         "type": "stdio"
       },
