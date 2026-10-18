@@ -1,0 +1,36 @@
+name: Bug report
+description: A tool or command in @inite/visibility does not do what the README says.
+title: "bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Remove any token before posting. For a wrong robots/identity/page verdict, the site URL is the most useful thing you can give.
+  - type: input
+    id: tool
+    attributes:
+      label: Tool or command
+      placeholder: e.g. check_ai_access, analyze_site, `inite-visibility login`
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: The input (e.g. the URL) and the output, including anything on stderr.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version, Node and MCP client
+      placeholder: "`npx @inite/visibility --version`, `node --version`, e.g. Claude Desktop on macOS"
+    validations:
+      required: true
