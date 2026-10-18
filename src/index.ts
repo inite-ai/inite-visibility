@@ -29,7 +29,7 @@ import { checkAiAccess, checkIdentityFiles, checkPageSignals, publicUrl } from "
  */
 
 export const REMOTE = process.env.INITE_MCP_URL ?? "https://inite.ai/api/mcp";
-export const VERSION = "1.2.0";
+export const VERSION = "1.2.0"; // x-release-please-version
 
 export class NotSignedIn extends Error {
   constructor() {

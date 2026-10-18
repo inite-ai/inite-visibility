@@ -59,8 +59,8 @@ The remote server and its scoring are a separate, private deployment.
    `packages[0].version` are equal (`1.2.0` today; the test checks the
    server.json one). `server.json` top-level `version` is the registry entry's
    own and moves on its own (it went to `2.0.0` when the remote lane changed).
-   No bumps on docs-only changes; never run `npm publish` or the registry
-   publisher — releases are a maintainer step.
+   Don't bump by hand: release-please moves the first three (see Releasing);
+   never run `npm publish` or the registry publisher yourself.
 9. **Don't hand-edit `dist/`** (git-ignored build output of `tsc`) and don't
    add runtime dependencies without asking (there is one:
    `@modelcontextprotocol/sdk`).
@@ -161,8 +161,8 @@ The loop you run **with** the human (Claude Code: `/contribute` runs it):
 7. Update the README where behaviour or tools changed.
 8. Commit: conventional commits (`feat(checks): …`, `fix(auth): …`, `docs: …`,
    `!` for breaking). Older history uses plain sentences; new commits use the
-   conventional form. There is no release automation — versions are bumped by
-   hand (rule 8).
+   conventional form. The commit type decides the next version (see
+   Releasing).
 9. Open a PR with the template filled, explaining the change to a
    non-engineer too.
 
@@ -189,6 +189,20 @@ in `test/remote.test.js`); auth tests point `INITE_TOKEN_FILE` at a temp dir
 (`test/auth.test.js`). Good model for a new check: the robots tests in
 `test/checks.test.js` — feed text to the pure parser, assert the verdict.
 CI runs `npm ci`, `npm run build`, `npm test`.
+
+## Releasing
+
+release-please (`.github/workflows/release-please.yml`) reads the
+conventional commits on `main` and keeps a release PR open (`fix` → patch,
+`feat` → minor, `!` → major). Merging that PR bumps `package.json`,
+`VERSION` and `server.json` `packages[0].version`, writes `CHANGELOG.md`,
+tags `vX.Y.Z` and, in the same run, publishes to npm with provenance
+(`publish-npm.yml`) and then the MCP Registry (`publish-mcp-registry.yml`).
+The registry entry is only republished when `server.json`'s top-level
+`version` is new — bump it in the release PR when the listing should change.
+Both publishes skip a version that is already out, so dispatching
+release-please by hand publishes whatever `main` carries. Secrets:
+`NPM_TOKEN`, `MCP_REGISTRY_PRIVATE_KEY`.
 
 ## When to ask a human
 
