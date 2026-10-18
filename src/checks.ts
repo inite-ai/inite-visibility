@@ -15,6 +15,11 @@
  * deliberately absent.
  */
 
+import dns from "node:dns";
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
+import { isIP } from "node:net";
+
 /** Crawlers that fetch a page to answer a live question. Blocking these costs visibility. */
 export const RETRIEVAL_BOTS = [
   "Bingbot",
@@ -54,13 +59,121 @@ export const IDENTITY_FILES = [
 
 const UA = "inite-visibility (+https://inite.ai)";
 const TIMEOUT_MS = 10_000;
+/** Redirects followed before giving up. A real site needs one or two. */
+export const MAX_REDIRECTS = 5;
+
+// ─── the public-web guard ─────────────────────────────────────────────────────
+
+/** [first address, prefix length] of IPv4 blocks that are not the public web. */
+const PRIVATE_V4: readonly (readonly [string, number])[] = [
+  ["0.0.0.0", 8], // "this network", incl. 0.0.0.0 which reaches the local host
+  ["10.0.0.0", 8],
+  ["100.64.0.0", 10], // carrier-grade NAT
+  ["127.0.0.0", 8], // loopback
+  ["169.254.0.0", 16], // link-local, incl. the cloud metadata address 169.254.169.254
+  ["172.16.0.0", 12],
+  ["192.0.0.0", 24], // IETF protocol assignments
+  ["192.0.2.0", 24], // documentation
+  ["192.88.99.0", 24], // 6to4 relay anycast
+  ["192.168.0.0", 16],
+  ["198.18.0.0", 15], // benchmarking
+  ["198.51.100.0", 24], // documentation
+  ["203.0.113.0", 24], // documentation
+  ["224.0.0.0", 4], // multicast
+  ["240.0.0.0", 4], // reserved, incl. broadcast 255.255.255.255
+] as const;
+
+function v4Bytes(ip: string): number[] | null {
+  const parts = ip.split(".");
+  if (parts.length !== 4) return null;
+  const bytes = parts.map((p) => (/^\d{1,3}$/.test(p) ? Number(p) : NaN));
+  return bytes.every((b) => b >= 0 && b <= 255) ? bytes : null;
+}
+
+/** An IPv6 address as 16 bytes, or null. Accepts `::`, a zone id and a trailing dotted quad. */
+function v6Bytes(raw: string): number[] | null {
+  let ip = raw.replace(/^\[|\]$/g, "").replace(/%.*$/, "").toLowerCase();
+  let tail: number[] = [];
+  const quad = ip.match(/^(.*:)(\d+\.\d+\.\d+\.\d+)$/);
+  if (quad) {
+    const v4 = v4Bytes(quad[2]!);
+    if (!v4) return null;
+    tail = v4;
+    ip = `${quad[1]}0:0`;
+  }
+  const halves = ip.split("::");
+  if (halves.length > 2) return null;
+  const parse = (s: string) => (s ? s.split(":") : []);
+  const head = parse(halves[0]!);
+  const rest = halves.length === 2 ? parse(halves[1]!) : [];
+  const missing = 8 - head.length - rest.length;
+  if (halves.length === 2 ? missing < 1 : missing !== 0) return null;
+  const groups = [...head, ...Array(halves.length === 2 ? missing : 0).fill("0"), ...rest];
+  const bytes: number[] = [];
+  for (const g of groups) {
+    if (!/^[0-9a-f]{1,4}$/.test(g)) return null;
+    const n = parseInt(g, 16);
+    bytes.push(n >> 8, n & 0xff);
+  }
+  if (tail.length) bytes.splice(12, 4, ...tail);
+  return bytes;
+}
+
+function inPrefix(bytes: number[], base: number[], bits: number): boolean {
+  for (let i = 0; i < bits; i++) {
+    const mask = 0x80 >> i % 8;
+    if ((bytes[i >> 3]! & mask) !== (base[i >> 3]! & mask)) return false;
+  }
+  return true;
+}
+
+function isPublicV4(bytes: number[]): boolean {
+  return !PRIVATE_V4.some(([base, bits]) => inPrefix(bytes, v4Bytes(base)!, bits));
+}
+
+/**
+ * Whether an IP address is on the public internet.
+ *
+ * This is what the hostname checks in `publicUrl()` cannot know on their own:
+ * `intranet.example.com` may resolve to 10.0.0.5, and a public page may
+ * redirect to 169.254.169.254. So every address a fetch is about to connect
+ * to passes through here. IPv6 forms that carry an IPv4 address inside them
+ * (mapped `::ffff:a.b.c.d`, the old compatible `::a.b.c.d`, NAT64, 6to4) are
+ * judged by the IPv4 address they carry, because that is where they lead.
+ * Anything that does not parse is not public.
+ */
+export function isPublicAddress(ip: string): boolean {
+  const v4 = v4Bytes(ip);
+  if (v4) return isPublicV4(v4);
+  const b = v6Bytes(ip);
+  if (!b) return false;
+  const zeros = (from: number, to: number) => b.slice(from, to).every((x) => x === 0);
+  // ::ffff:a.b.c.d (mapped) and ::a.b.c.d (compatible, incl. :: and ::1)
+  if (zeros(0, 10) && ((b[10] === 0xff && b[11] === 0xff) || (b[10] === 0 && b[11] === 0))) {
+    return isPublicV4(b.slice(12, 16));
+  }
+  // 64:ff9b::/96 — NAT64 translates to the embedded IPv4 address
+  if (b[0] === 0x00 && b[1] === 0x64 && b[2] === 0xff && b[3] === 0x9b && zeros(4, 12)) {
+    return isPublicV4(b.slice(12, 16));
+  }
+  // 2002::/16 — 6to4 tunnels to the IPv4 address in bytes 2–5
+  if (b[0] === 0x20 && b[1] === 0x02) return isPublicV4(b.slice(2, 6));
+  if ((b[0]! & 0xfe) === 0xfc) return false; // fc00::/7 unique-local
+  if (b[0] === 0xfe && (b[1]! & 0xc0) === 0x80) return false; // fe80::/10 link-local
+  if (b[0] === 0xfe && (b[1]! & 0xc0) === 0xc0) return false; // fec0::/10 old site-local
+  if (b[0] === 0xff) return false; // ff00::/8 multicast
+  if (b[0] === 0x01 && zeros(1, 8)) return false; // 100::/64 discard
+  if (b[0] === 0x20 && b[1] === 0x01 && b[2] === 0x0d && b[3] === 0xb8) return false; // 2001:db8::/32 documentation
+  return true;
+}
 
 /**
  * Only the public web, even though this runs locally.
  *
  * A model can be talked into things, and "fetch http://192.168.1.1/" from a
  * tool running on somebody's laptop is a port scan of their own network with
- * extra steps.
+ * extra steps. This judges what the URL says; `isPublicAddress()` judges where
+ * its name resolves to, at connect time, inside `get()`.
  */
 export function publicUrl(raw: unknown): URL | null {
   if (typeof raw !== "string" || !raw.trim()) return null;
@@ -68,23 +181,111 @@ export function publicUrl(raw: unknown): URL | null {
   try {
     const u = new URL(withScheme);
     if (!/^https?:$/.test(u.protocol)) return null;
+    if (u.username || u.password) return null;
     if (!u.hostname.includes(".")) return null;
     if (/^(localhost|127\.|10\.|192\.168\.|169\.254\.|::1|\[)/i.test(u.hostname)) return null;
     if (/^172\.(1[6-9]|2\d|3[01])\./.test(u.hostname)) return null;
+    // An address literal never reaches the resolver, so it is judged here.
+    if (isIP(u.hostname) && !isPublicAddress(u.hostname)) return null;
     return u;
   } catch {
     return null;
   }
 }
 
-async function get(url: string): Promise<{ status: number; body: string } | null> {
+type Resolved = { address: string; family: number };
+type LookupCallback = (err: NodeJS.ErrnoException | null, address: string | Resolved[], family?: number) => void;
+
+/**
+ * The resolver every local fetch connects through.
+ *
+ * Checking a name and then letting the HTTP client resolve it again leaves a
+ * gap: a name can answer a public address to the check and a private one to
+ * the connection (DNS rebinding). So the check happens here, in the `lookup`
+ * the socket itself uses, and the socket connects to exactly the addresses
+ * that were checked. If any address a name resolves to is not public, the
+ * name is refused outright rather than raced against round-robin.
+ */
+export function publicLookup(
+  hostname: string,
+  options: { all?: boolean; family?: number | string } | number | undefined,
+  callback: LookupCallback,
+): void {
+  const all = typeof options === "object" && options !== null && options.all === true;
+  dns.lookup(hostname, { all: true }, (err, addresses) => {
+    if (err) return callback(err, all ? [] : "", 0);
+    const list = addresses as Resolved[];
+    const refused = !list.length || list.some((a) => !isPublicAddress(a.address));
+    if (refused) {
+      const e: NodeJS.ErrnoException = new Error(`${hostname} does not resolve to a public address`);
+      e.code = "ENOTPUBLIC";
+      return callback(e, all ? [] : "", 0);
+    }
+    if (all) return callback(null, list);
+    callback(null, list[0]!.address, list[0]!.family);
+  });
+}
+
+/** One HTTP exchange, no redirects followed. The seam the tests replace. */
+export type Transport = (
+  url: URL,
+  signal: AbortSignal,
+) => Promise<{ status: number; location: string | null; body: string }>;
+
+const nodeTransport: Transport = (url, signal) =>
+  new Promise((resolve, reject) => {
+    const request = url.protocol === "https:" ? httpsRequest : httpRequest;
+    const req = request(
+      url,
+      {
+        method: "GET",
+        headers: { "user-agent": UA, accept: "*/*" },
+        lookup: publicLookup as never,
+        signal,
+      },
+      (res) => {
+        const status = res.statusCode ?? 0;
+        const location = typeof res.headers.location === "string" ? res.headers.location : null;
+        if (status !== 200) {
+          res.resume();
+          return resolve({ status, location, body: "" });
+        }
+        const chunks: Buffer[] = [];
+        res.on("data", (c: Buffer) => chunks.push(c));
+        res.on("end", () => resolve({ status, location, body: Buffer.concat(chunks).toString("utf8") }));
+        res.on("error", reject);
+      },
+    );
+    req.on("error", reject);
+    req.end();
+  });
+
+const REDIRECTS = new Set([301, 302, 303, 307, 308]);
+
+/**
+ * The only fetch the local tools make.
+ *
+ * Redirects are followed here, by hand, rather than by the HTTP client,
+ * because each hop is a new URL the site chose: it gets the same
+ * `publicUrl()` check as the one the person typed, and its name goes through
+ * `publicLookup()` like the first. A chain longer than `MAX_REDIRECTS`, or a
+ * hop that leaves the public web, ends the fetch as unreachable.
+ */
+export async function get(
+  url: string,
+  transport: Transport = nodeTransport,
+): Promise<{ status: number; body: string } | null> {
+  const signal = AbortSignal.timeout(TIMEOUT_MS);
+  let current = publicUrl(url);
   try {
-    const res = await fetch(url, {
-      headers: { "user-agent": UA, accept: "*/*" },
-      redirect: "follow",
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    });
-    return { status: res.status, body: res.status === 200 ? await res.text() : "" };
+    for (let hop = 0; current; hop++) {
+      const res = await transport(current, signal);
+      if (!REDIRECTS.has(res.status) || !res.location) return { status: res.status, body: res.body };
+      if (hop >= MAX_REDIRECTS) return null;
+      const next = new URL(res.location, current);
+      current = /^https?:$/.test(next.protocol) ? publicUrl(next.toString()) : null;
+    }
+    return null;
   } catch {
     return null;
   }

@@ -38,3 +38,11 @@ test('the package name and the MCP server name agree', () => {
   assert.equal(server.packages[0].identifier, pkg.name)
   assert.equal(server.packages[0].version, pkg.version)
 })
+
+test('the version the server reports is the package version', () => {
+  // VERSION in src/index.ts goes into the MCP handshake and the user-agent; a
+  // copy that lags package.json reports a release that is not the one running.
+  const src = readFileSync(new URL('../src/index.ts', import.meta.url), 'utf8')
+  const declared = src.match(/export const VERSION = "([^"]+)"/)?.[1]
+  assert.equal(declared, pkg.version)
+})
