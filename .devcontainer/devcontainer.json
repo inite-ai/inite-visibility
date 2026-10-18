@@ -1,0 +1,10 @@
+{
+  "name": "inite-visibility",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-20-bookworm",
+  "postCreateCommand": "npm ci",
+  "customizations": {
+    "vscode": {
+      "extensions": ["github.vscode-github-actions"]
+    }
+  }
+}

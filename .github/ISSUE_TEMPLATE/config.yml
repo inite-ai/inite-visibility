@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: How the server works (README)
+    url: https://github.com/inite-ai/inite-visibility#readme
+    about: Local vs remote tools, signing in, environment variables.
+  - name: The AI visibility analyzer on the web
+    url: https://inite.ai/en/analyze
+    about: The same audit in a browser; account and plan questions belong there.
