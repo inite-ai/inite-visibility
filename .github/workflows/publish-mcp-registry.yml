@@ -6,10 +6,11 @@ name: Publish to MCP Registry
 # dispatchable by hand. Idempotent: an entry version the registry already
 # has is skipped, since the registry will not take the same version twice.
 #
-# The namespace is domain-verified (inite.ai DNS TXT `v=MCPv1; k=ed25519`),
+# The namespace is domain-verified (https://inite.ai/.well-known/mcp-registry-auth,
+# `v=MCPv1; k=ed25519`; there is no DNS TXT record),
 # not io.github.inite-ai, so GitHub OIDC cannot authorize it: the login
 # signs with the domain's Ed25519 private key, held as the secret
-# MCP_REGISTRY_PRIVATE_KEY (hex, the form `mcp-publisher login dns` takes).
+# MCP_REGISTRY_PRIVATE_KEY (hex, the form `mcp-publisher login http` takes).
 on:
   workflow_call:
     inputs:
@@ -85,10 +86,10 @@ jobs:
           MCP_REGISTRY_PRIVATE_KEY: ${{ secrets.MCP_REGISTRY_PRIVATE_KEY }}
         run: |
           if [ -z "${MCP_REGISTRY_PRIVATE_KEY:-}" ]; then
-            echo "::error::MCP_REGISTRY_PRIVATE_KEY is not set. Add the hex Ed25519 private key whose public half is in the inite.ai DNS TXT record (v=MCPv1) as a repository or organization secret. npm is unaffected; re-run this job once the secret exists."
+            echo "::error::MCP_REGISTRY_PRIVATE_KEY is not set. Add the hex Ed25519 private key whose public half is served at https://inite.ai/.well-known/mcp-registry-auth as a repository or organization secret. npm is unaffected; re-run this job once the secret exists."
             exit 1
           fi
-          ./mcp-publisher login dns --domain inite.ai --private-key "$MCP_REGISTRY_PRIVATE_KEY"
+          ./mcp-publisher login http --domain inite.ai --private-key "$MCP_REGISTRY_PRIVATE_KEY"
 
       - name: Publish
         if: steps.check.outputs.exists == 'false'
