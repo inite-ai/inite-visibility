@@ -1,7 +1,7 @@
 {
   "name": "@inite/visibility",
   "mcpName": "ai.inite/inite-visibility",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "MCP server for INITE - the portal, the AI visibility analyzer and the Atlas of AI tools, from inside your agent. Works without an account; signing in adds the full audit.",
   "keywords": [
     "mcp",
