@@ -27,7 +27,7 @@ import { dirname, join } from "node:path";
  */
 
 const ISSUER = process.env.INITE_AUTH_URL ?? "https://auth-api.inite.ai";
-const RESOURCE = process.env.INITE_MCP_URL ?? "https://inite.ai/api/mcp";
+const RESOURCE = process.env.INITE_MCP_URL ?? "https://inite.ai/api/mcp/analyzer";
 const SCOPES = "openid profile email offline_access";
 
 export const TOKEN_PATH =
@@ -193,7 +193,7 @@ export async function login(): Promise<void> {
     state,
     code_challenge: challenge,
     code_challenge_method: "S256",
-    // RFC 8707. This is what puts inite.ai/api/mcp in the token's audience,
+    // RFC 8707. This is what puts inite.ai/api/mcp/analyzer in the token's audience,
     // which is the only audience that endpoint accepts.
     resource: RESOURCE,
   }).toString();

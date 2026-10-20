@@ -15,20 +15,23 @@ import { checkAiAccess, checkIdentityFiles, checkPageSignals, publicUrl } from "
  * this, so it costs nobody anything and works the moment the package is
  * installed.
  *
- * The remote tools are inite.ai's MCP server: the portal, the analyzer and
- * the Atlas. It answers a caller with no token too - as a guest, with the
- * open tools and the audit as a survey, the rule the website keeps for a
- * visitor without an account. Signing in makes the calls the account's: its
+ * The remote tools are inite.ai's AI visibility server, its analyzer door
+ * (https://inite.ai/api/mcp/analyzer): the identity check, the fix plan, a
+ * competitor read the same way, the history, the audit. Visibility and
+ * nothing else - the portal and the Atlas are servers of their own
+ * (ai.inite/inite, ai.inite/atlas). It answers a caller with no token too -
+ * as a guest, with the open tools and the audit as a survey, the rule the
+ * website keeps for a visitor without an account. Signing in makes the calls the account's: its
  * tier, its member tools, its data. A member tool called signed out answers
  * 401, and that - not the absence of a token - is when this says to sign in.
  *
  * For the remote half this process defines no schemas: it asks
- * https://inite.ai/api/mcp what it offers and forwards calls there, so the
+ * https://inite.ai/api/mcp/analyzer what it offers and forwards calls there, so the
  * tool list stays whatever the service implements today. A local copy would be
  * a second source of truth, and the first thing it would do is drift.
  */
 
-export const REMOTE = process.env.INITE_MCP_URL ?? "https://inite.ai/api/mcp";
+export const REMOTE = process.env.INITE_MCP_URL ?? "https://inite.ai/api/mcp/analyzer";
 export const VERSION = "1.2.0"; // x-release-please-version
 
 export class NotSignedIn extends Error {
