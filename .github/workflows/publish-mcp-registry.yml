@@ -75,6 +75,23 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # The registry checks the npm package the entry names, and npm serves a
+      # new version some seconds after `npm publish` returns: twice (1.2.0,
+      # 1.3.0) the registry answered 404 and the job had to be re-run. It reads
+      # npm through its own cache, so half a minute more once npm answers.
+      - name: Wait for npm to serve the package version
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          set -euo pipefail
+          PKG="$(jq -r '.packages[0].identifier' server.json)"
+          VER="$(jq -r '.packages[0].version' server.json)"
+          for i in $(seq 1 36); do
+            if curl -fsS "https://registry.npmjs.org/${PKG/\//%2F}/$VER" >/dev/null 2>&1; then echo "$PKG@$VER is on npm"; sleep 30; exit 0; fi
+            sleep 5
+          done
+          echo "::error::$PKG@$VER did not appear on npm within three minutes"
+          exit 1
+
       - name: Install mcp-publisher
         if: steps.check.outputs.exists == 'false'
         run: |
