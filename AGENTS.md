@@ -14,7 +14,7 @@ two halves:
   `check_page_signals`: fetch a public site's `robots.txt`, identity files and
   homepage on the user's machine and report **facts**. No account, no call to
   inite.ai.
-- **Remote bridge** — everything else is `https://inite.ai/api/mcp`'s own tool
+- **Remote bridge** — everything else is `https://inite.ai/api/mcp/analyzer`'s own tool
   list (portal, AI-visibility analyzer `analyze_site`/`get_analysis`, Atlas),
   forwarded as-is, as a guest when signed out or with the user's token.
 
